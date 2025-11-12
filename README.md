@@ -1,4 +1,5 @@
 # ARUco Distance & Rotation Detector
+# ESTO ES UN CAMBIO 
 
 Sistema de detección en tiempo real de marcadores ARUco que mide distancia y rotación usando la cámara del portátil.
 
