@@ -7,6 +7,21 @@ Detecta marcadores ARUco y calcula distancia y rotación usando la cámara del p
 import cv2
 import numpy as np
 import sys
+import platform
+
+# Detectar si estamos en Raspberry Pi
+IS_RASPBERRY_PI = platform.machine().startswith('arm') or platform.machine().startswith('aarch64')
+
+# Intentar importar picamera2 si estamos en RPi
+PICAMERA2_AVAILABLE = False
+if IS_RASPBERRY_PI:
+    try:
+        from picamera2 import Picamera2
+        PICAMERA2_AVAILABLE = True
+        print("✓ Usando picamera2 para Raspberry Pi")
+    except ImportError:
+        print("⚠ picamera2 no disponible, usando OpenCV")
+        PICAMERA2_AVAILABLE = False
 
 # Configuración del marcador ARUco
 ARUCO_DICT = cv2.aruco.DICT_6X6_250
@@ -72,9 +87,32 @@ def draw_axis(img, camera_matrix, dist_coeffs, rvec, tvec, length=0.03):
     return img
 
 
-def initialize_camera():
+def initialize_camera_picamera2():
     """
-    Intenta inicializar la cámara con diferentes backends
+    Inicializa la cámara usando picamera2 (Raspberry Pi)
+    Retorna el objeto Picamera2 o None si falla
+    """
+    try:
+        print("Inicializando cámara con picamera2...")
+        picam2 = Picamera2()
+
+        # Configurar cámara para video con resolución adecuada
+        config = picam2.create_preview_configuration(
+            main={"size": (640, 480), "format": "RGB888"}
+        )
+        picam2.configure(config)
+        picam2.start()
+
+        print("✓ Cámara Raspberry Pi inicializada correctamente")
+        return picam2
+    except Exception as e:
+        print(f"✗ Error al inicializar picamera2: {e}")
+        return None
+
+
+def initialize_camera_opencv():
+    """
+    Intenta inicializar la cámara con diferentes backends de OpenCV
     Retorna el objeto VideoCapture o None si falla
     """
     # Lista de backends a probar en orden de preferencia
@@ -84,7 +122,7 @@ def initialize_camera():
         (0, "Default")
     ]
 
-    print("Intentando acceder a la cámara...")
+    print("Intentando acceder a la cámara con OpenCV...")
 
     for backend, name in backends:
         print(f"  Probando backend: {name}...")
@@ -114,21 +152,45 @@ def initialize_camera():
     return None
 
 
+def initialize_camera():
+    """
+    Inicializa la cámara usando el método apropiado según la plataforma
+    Retorna tupla (camera_object, is_picamera2)
+    """
+    # Intentar picamera2 primero en Raspberry Pi
+    if PICAMERA2_AVAILABLE:
+        cam = initialize_camera_picamera2()
+        if cam is not None:
+            return cam, True
+
+    # Fallback a OpenCV
+    cam = initialize_camera_opencv()
+    if cam is not None:
+        return cam, False
+
+    return None, False
+
+
 def main():
     # Inicializar captura de video
-    cap = initialize_camera()
+    cam, is_picamera = initialize_camera()
 
-    if cap is None:
+    if cam is None:
         print("\n❌ Error: No se pudo acceder a la cámara")
         print("\nPosibles soluciones:")
-        print("1. Verifica que la cámara esté conectada:")
-        print("   ls /dev/video*")
-        print("2. Verifica permisos:")
-        print("   sudo usermod -a -G video $USER")
-        print("   (luego cierra sesión y vuelve a entrar)")
-        print("3. Prueba con otro programa:")
-        print("   raspistill -o test.jpg  # Para cámara oficial RPi")
-        print("   ffmpeg -f v4l2 -i /dev/video0 -frames 1 test.jpg  # Para USB")
+        if IS_RASPBERRY_PI:
+            print("1. Instala picamera2:")
+            print("   sudo apt install -y python3-picamera2")
+            print("2. Habilita la cámara:")
+            print("   sudo raspi-config")
+            print("   Selecciona: Interface Options > Camera > Enable")
+            print("3. Reinicia la Raspberry Pi")
+        else:
+            print("1. Verifica que la cámara esté conectada:")
+            print("   ls /dev/video*")
+            print("2. Verifica permisos:")
+            print("   sudo usermod -a -G video $USER")
+            print("   (luego cierra sesión y vuelve a entrar)")
         sys.exit(1)
 
     # Inicializar detector ARUco
@@ -145,9 +207,17 @@ def main():
     auto_calibrate = False
 
     while True:
-        ret, frame = cap.read()
+        # Leer frame según el tipo de cámara
+        if is_picamera:
+            frame = cam.capture_array()
+            ret = frame is not None
+            # picamera2 devuelve RGB, convertir a BGR para OpenCV
+            if ret:
+                frame = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
+        else:
+            ret, frame = cam.read()
 
-        if not ret:
+        if not ret or frame is None:
             print("Error: No se pudo leer el frame")
             break
 
@@ -272,7 +342,10 @@ def main():
             print("=====================================\n")
 
     # Liberar recursos
-    cap.release()
+    if is_picamera:
+        cam.stop()
+    else:
+        cam.release()
     cv2.destroyAllWindows()
     print("\n\nPrograma finalizado")
 

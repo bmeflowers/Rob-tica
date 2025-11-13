@@ -8,12 +8,63 @@ import cv2
 import sys
 import subprocess
 import os
+import platform
+
+# Detectar si estamos en Raspberry Pi
+IS_RASPBERRY_PI = platform.machine().startswith('arm') or platform.machine().startswith('aarch64')
+
+
+def check_picamera2():
+    """Verifica si picamera2 está instalado y funciona"""
+    print("=" * 60)
+    print("1. VERIFICANDO PICAMERA2 (Raspberry Pi)")
+    print("=" * 60)
+
+    if not IS_RASPBERRY_PI:
+        print("⊘ No es una Raspberry Pi, saltando verificación de picamera2")
+        return False
+
+    try:
+        from picamera2 import Picamera2
+        print("✓ picamera2 está instalado")
+
+        # Intentar inicializar
+        try:
+            print("\nIntentando inicializar cámara con picamera2...")
+            picam2 = Picamera2()
+            config = picam2.create_preview_configuration(
+                main={"size": (640, 480), "format": "RGB888"}
+            )
+            picam2.configure(config)
+            picam2.start()
+
+            # Capturar un frame de prueba
+            frame = picam2.capture_array()
+            if frame is not None:
+                height, width = frame.shape[:2]
+                print(f"✓ picamera2 FUNCIONA correctamente")
+                print(f"  Resolución: {width}x{height}")
+                picam2.stop()
+                return True
+            else:
+                print("✗ No se pudo capturar frame con picamera2")
+                picam2.stop()
+                return False
+
+        except Exception as e:
+            print(f"✗ Error al usar picamera2: {e}")
+            return False
+
+    except ImportError:
+        print("✗ picamera2 NO está instalado")
+        print("  Instalar con: sudo apt install -y python3-picamera2")
+        return False
 
 
 def check_camera_devices():
     """Verifica dispositivos de cámara disponibles en el sistema"""
-    print("=" * 60)
-    print("1. VERIFICANDO DISPOSITIVOS DE CÁMARA")
+    print("\n" + "=" * 60)
+    print("2. VERIFICANDO DISPOSITIVOS DE CÁMARA")
     print("=" * 60)
 
     try:
@@ -36,7 +87,7 @@ def check_camera_devices():
 def check_user_permissions():
     """Verifica si el usuario tiene permisos para acceder a la cámara"""
     print("\n" + "=" * 60)
-    print("2. VERIFICANDO PERMISOS DE USUARIO")
+    print("3. VERIFICANDO PERMISOS DE USUARIO")
     print("=" * 60)
 
     try:
@@ -60,7 +111,7 @@ def check_user_permissions():
 def test_opencv_backends():
     """Prueba diferentes backends de OpenCV"""
     print("\n" + "=" * 60)
-    print("3. PROBANDO BACKENDS DE OPENCV")
+    print("4. PROBANDO BACKENDS DE OPENCV")
     print("=" * 60)
 
     backends = [
@@ -100,7 +151,7 @@ def test_opencv_backends():
 def test_simple_capture():
     """Prueba captura simple sin especificar backend"""
     print("\n" + "=" * 60)
-    print("4. PRUEBA DE CAPTURA SIMPLE")
+    print("5. PRUEBA DE CAPTURA SIMPLE (OpenCV)")
     print("=" * 60)
 
     print("\nIntentando cv2.VideoCapture(0)...")
@@ -130,7 +181,7 @@ def test_simple_capture():
 def check_v4l2_utils():
     """Verifica si v4l2-utils está instalado"""
     print("\n" + "=" * 60)
-    print("5. VERIFICANDO HERRAMIENTAS DEL SISTEMA")
+    print("6. VERIFICANDO HERRAMIENTAS DEL SISTEMA")
     print("=" * 60)
 
     try:
@@ -166,6 +217,7 @@ def main():
     print()
 
     # Ejecutar diagnósticos
+    picamera2_works = check_picamera2()
     devices_ok = check_camera_devices()
     permissions_ok = check_user_permissions()
 
@@ -181,6 +233,20 @@ def main():
     print("\n" + "=" * 60)
     print("RESUMEN Y RECOMENDACIONES")
     print("=" * 60)
+
+    if IS_RASPBERRY_PI:
+        if picamera2_works:
+            print("\n✓✓ RECOMENDACIÓN: picamera2 funciona perfectamente")
+            print("   Tu proyecto está configurado para usar picamera2 automáticamente")
+            print("   Puedes ejecutar: python3 aruco_distance_rotation.py")
+        else:
+            print("\n⚠️  picamera2 no está funcionando")
+            print("   Soluciones:")
+            print("   1. Instala picamera2: sudo apt install -y python3-picamera2")
+            print("   2. Habilita la cámara: sudo raspi-config")
+            print("      Selecciona: Interface Options > Camera > Enable")
+            print("   3. Reinicia la Raspberry Pi")
+            print("\n   El sistema intentará usar OpenCV como alternativa...")
 
     if working_backends:
         print("\n✓ Backends que funcionan:")
