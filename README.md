@@ -18,10 +18,33 @@ Sistema de detección en tiempo real de marcadores ARUco que mide distancia y ro
 
 ## Instalación
 
-1. Instala las dependencias:
+### Instalación Automática (Recomendado)
+
+El script de instalación detecta automáticamente tu plataforma y ajusta las dependencias:
+
+```bash
+./install_dependencies.sh
+```
+
+### Instalación Manual
+
+#### En PC/Mac/Linux (x86/x64):
 
 ```bash
 pip install -r requirements.txt
+```
+
+#### En Raspberry Pi:
+
+**Opción 1: Desde repositorios del sistema (más rápido)**
+```bash
+sudo apt update
+sudo apt install -y python3-opencv python3-numpy
+```
+
+**Opción 2: Via pip (más lento)**
+```bash
+pip install opencv-python-headless numpy
 ```
 
 ## Uso Rápido
@@ -140,9 +163,21 @@ Los ejes 3D dibujados sobre el marcador:
 .
 ├── aruco_distance_rotation.py    # Script principal
 ├── camera_calibration.py          # Herramienta de calibración
+├── install_dependencies.sh        # Instalador automático
 ├── requirements.txt               # Dependencias
 └── README.md                      # Este archivo
 ```
+
+## Notas para Raspberry Pi
+
+- **Raspberry Pi 3/4**: El script de instalación automática está optimizado para estas plataformas
+- **Rendimiento**: Considera reducir la resolución de la cámara si hay lag:
+  ```python
+  cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
+  cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
+  ```
+- **Cámara Pi**: Compatible con cámaras oficiales y USB
+- **OpenCV versión**: La versión desde repositorios (apt) puede ser más antigua pero es estable
 
 ## Recursos Adiciales
 
