@@ -72,17 +72,64 @@ def draw_axis(img, camera_matrix, dist_coeffs, rvec, tvec, length=0.03):
     return img
 
 
+def initialize_camera():
+    """
+    Intenta inicializar la cámara con diferentes backends
+    Retorna el objeto VideoCapture o None si falla
+    """
+    # Lista de backends a probar en orden de preferencia
+    backends = [
+        (cv2.CAP_V4L2, "V4L2 (Linux)"),
+        (cv2.CAP_ANY, "Auto"),
+        (0, "Default")
+    ]
+
+    print("Intentando acceder a la cámara...")
+
+    for backend, name in backends:
+        print(f"  Probando backend: {name}...")
+        try:
+            if isinstance(backend, int) and backend == 0:
+                cap = cv2.VideoCapture(0)
+            else:
+                cap = cv2.VideoCapture(0, backend)
+
+            if cap.isOpened():
+                # Probar leer un frame
+                ret, frame = cap.read()
+                if ret and frame is not None:
+                    print(f"  ✓ Cámara inicializada con {name}")
+                    # Configurar resolución
+                    cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
+                    cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
+                    return cap
+                else:
+                    cap.release()
+            else:
+                cap.release()
+        except Exception as e:
+            print(f"  Error con {name}: {e}")
+            continue
+
+    return None
+
+
 def main():
     # Inicializar captura de video
-    cap = cv2.VideoCapture(0)
+    cap = initialize_camera()
 
-    if not cap.isOpened():
-        print("Error: No se pudo acceder a la cámara")
+    if cap is None:
+        print("\n❌ Error: No se pudo acceder a la cámara")
+        print("\nPosibles soluciones:")
+        print("1. Verifica que la cámara esté conectada:")
+        print("   ls /dev/video*")
+        print("2. Verifica permisos:")
+        print("   sudo usermod -a -G video $USER")
+        print("   (luego cierra sesión y vuelve a entrar)")
+        print("3. Prueba con otro programa:")
+        print("   raspistill -o test.jpg  # Para cámara oficial RPi")
+        print("   ffmpeg -f v4l2 -i /dev/video0 -frames 1 test.jpg  # Para USB")
         sys.exit(1)
-
-    # Configurar resolución
-    cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
-    cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
 
     # Inicializar detector ARUco
     aruco_dict = cv2.aruco.getPredefinedDictionary(ARUCO_DICT)

@@ -136,6 +136,56 @@ Los ejes 3D dibujados sobre el marcador:
 
 ## Solución de Problemas
 
+### Problemas con la cámara en Raspberry Pi
+
+Si recibes el error `ModuleNotFoundError: No module named 'cv2'`:
+```bash
+# Instalar OpenCV
+sudo apt install python3-opencv python3-numpy
+```
+
+Si recibes errores de GStreamer o no se puede leer frames:
+
+**1. Ejecuta el script de diagnóstico:**
+```bash
+python3 diagnose_camera.py
+```
+
+Este script verificará:
+- Si la cámara está conectada
+- Permisos del usuario
+- Qué backends de OpenCV funcionan
+- Configuración del sistema
+
+**2. Soluciones comunes:**
+
+a) **Añadir usuario al grupo video:**
+```bash
+sudo usermod -a -G video $USER
+# Luego cierra sesión y vuelve a entrar
+```
+
+b) **Para cámara oficial Raspberry Pi:**
+```bash
+# Habilitar cámara en raspi-config
+sudo raspi-config
+# Selecciona: Interface Options > Camera > Enable
+# Reinicia la Raspberry Pi
+```
+
+c) **Verificar dispositivos de video:**
+```bash
+ls -l /dev/video*
+v4l2-ctl --list-devices  # Instala con: sudo apt install v4l-utils
+```
+
+d) **Si la cámara funciona pero con lag:**
+Edita `aruco_distance_rotation.py` y reduce la resolución:
+```python
+cap.set(cv2.CAP_PROP_FRAME_WIDTH, 320)   # Reducir de 640
+cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 240)  # Reducir de 480
+```
+
 ### La distancia no es precisa
 
 1. Verifica que `MARKER_SIZE` coincida con el tamaño real impreso
@@ -161,8 +211,9 @@ Los ejes 3D dibujados sobre el marcador:
 
 ```
 .
-├── aruco_distance_rotation.py    # Script principal
+├── aruco_distance_rotation.py    # Script principal de detección
 ├── camera_calibration.py          # Herramienta de calibración
+├── diagnose_camera.py             # Diagnóstico de cámara (RPi)
 ├── install_dependencies.sh        # Instalador automático
 ├── requirements.txt               # Dependencias
 └── README.md                      # Este archivo
