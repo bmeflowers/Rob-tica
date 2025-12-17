@@ -11,7 +11,7 @@ BLUE='\033[0;34m'
 NC='\033[0m'
 
 # CONFIGURACIÓN - CAMBIAR SEGÚN TU HC-05
-MAC_HC05="00:23:10:00:D5:81"   # Dirección MAC correcta del HC-05
+MAC_HC05="00:23:10:00:D5:81"  # ← CAMBIAR ESTO
 PUERTO="/dev/rfcomm0"
 CANAL=1
 
