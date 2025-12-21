@@ -21,7 +21,7 @@ NC='\033[0m'
 BLUETOOTH_SCRIPT="$HOME/Desktop/Proyecto Robotica/Rob-tica/script_mantenerB3.sh"
 
 # Ruta a tu código Python de ArUco
-PYTHON_SCRIPT="$HOME/Desktop/Proyecto Robotica/Rob-tica/aruco_blt.py"
+PYTHON_SCRIPT="$HOME/Desktop/Proyecto Robotica/Rob-tica/aruco_blt1.py"
 
 # Directorio de logs
 LOG_DIR="$HOME/robot_logs"

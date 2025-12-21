@@ -1,11 +1,10 @@
 #!/usr/bin/env python3
+# -*- coding: utf-8 -*-
 """
-Robot Seguidor de Códigos ArUco - VERSIÓN FINAL
-Basado en código funcional de detección ARUco con distancia y rotación
+Robot Seguidor de Códigos ArUco - VERSIÓN HEADLESS
 Raspberry Pi 4 + Arduino + HC-05 Bluetooth
 Solo 2 motores (M1 y M2)
-
-IMPORTANTE: Ejecutar primero ~/mantener_bluetooth.sh en otra terminal
+Sin display - para ejecución automática
 """
 
 import cv2
@@ -25,9 +24,9 @@ if IS_RASPBERRY_PI:
     try:
         from picamera2 import Picamera2
         PICAMERA2_AVAILABLE = True
-        print("✓ Usando picamera2 para Raspberry Pi")
+        print("OK - Usando picamera2 para Raspberry Pi")
     except ImportError:
-        print("⚠ picamera2 no disponible, usando OpenCV")
+        print("AVISO - picamera2 no disponible, usando OpenCV")
         PICAMERA2_AVAILABLE = False
 
 # ============== CONFIGURACIÓN ==============
@@ -79,10 +78,10 @@ def initialize_camera_picamera2():
         )
         picam2.configure(config)
         picam2.start()
-        print("✓ Cámara Raspberry Pi inicializada correctamente")
+        print("OK - Cámara Raspberry Pi inicializada correctamente")
         return picam2
     except Exception as e:
-        print(f"✗ Error al inicializar picamera2: {e}")
+        print(f"ERROR - Error al inicializar picamera2: {e}")
         return None
 
 
@@ -107,7 +106,7 @@ def initialize_camera_opencv():
             if cap.isOpened():
                 ret, frame = cap.read()
                 if ret and frame is not None:
-                    print(f"  ✓ Cámara inicializada con {name}")
+                    print(f"  OK - Cámara inicializada con {name}")
                     cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
                     cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
                     return cap
@@ -155,29 +154,6 @@ def rotation_matrix_to_euler_angles(R):
     return np.degrees([x, y, z])
 
 
-def draw_axis(img, camera_matrix, dist_coeffs, rvec, tvec, length=0.03):
-    """Dibuja los ejes X, Y, Z del marcador"""
-    axis_points = np.float32([
-        [0, 0, 0],
-        [length, 0, 0],
-        [0, length, 0],
-        [0, 0, length]
-    ])
-
-    image_points, _ = cv2.projectPoints(
-        axis_points, rvec, tvec, camera_matrix, dist_coeffs
-    )
-
-    image_points = image_points.astype(int)
-    origin = tuple(image_points[0].ravel())
-
-    img = cv2.line(img, origin, tuple(image_points[1].ravel()), (0, 0, 255), 3)
-    img = cv2.line(img, origin, tuple(image_points[2].ravel()), (0, 255, 0), 3)
-    img = cv2.line(img, origin, tuple(image_points[3].ravel()), (255, 0, 0), 3)
-
-    return img
-
-
 # ============== CLASE PRINCIPAL ==============
 
 class RobotArucoTracker:
@@ -191,6 +167,8 @@ class RobotArucoTracker:
         self.modo_debug = True
         self.aruco_detectado = False
         self.tiempo_sin_aruco = time.time()
+        self.frames_procesados = 0
+        self.ultimo_reporte = time.time()
         
     def verificar_conexion_bluetooth(self):
         """Verifica que /dev/rfcomm0 exista"""
@@ -200,7 +178,7 @@ class RobotArucoTracker:
         
         import os
         if not os.path.exists(BLUETOOTH_PORT):
-            print(f"✗ ERROR: {BLUETOOTH_PORT} no existe")
+            print(f"ERROR: {BLUETOOTH_PORT} no existe")
             print()
             print("SOLUCIÓN:")
             print("1. Abre otra terminal")
@@ -210,7 +188,7 @@ class RobotArucoTracker:
             print()
             return False
         
-        print(f"✓ {BLUETOOTH_PORT} existe")
+        print(f"OK - {BLUETOOTH_PORT} existe")
         return True
     
     def conectar_bluetooth(self):
@@ -225,7 +203,7 @@ class RobotArucoTracker:
             )
             time.sleep(1)
             
-            print("✓ Conexión serial establecida")
+            print("OK - Conexión serial establecida")
             
             # Comando de prueba
             self.bluetooth.write(b'S')
@@ -233,15 +211,15 @@ class RobotArucoTracker:
             
             if self.bluetooth.in_waiting > 0:
                 respuesta = self.bluetooth.read(self.bluetooth.in_waiting).decode(errors='ignore')
-                print(f"✓ Arduino respondió: {respuesta.strip()}")
+                print(f"OK - Arduino respondió: {respuesta.strip()}")
             else:
-                print("✓ Puerto serial funcional")
+                print("OK - Puerto serial funcional")
             
             return True
             
         except Exception as e:
-            print(f"✗ Error al conectar: {e}")
-            print("Verifica que ~/mantener_bluetooth.sh esté corriendo")
+            print(f"ERROR - Error al conectar: {e}")
+            print("Verifica que el script de Bluetooth esté corriendo")
             return False
     
     def inicializar_camara(self):
@@ -251,15 +229,15 @@ class RobotArucoTracker:
         self.cam, self.is_picamera = initialize_camera()
         
         if self.cam is None:
-            print("\n❌ Error: No se pudo acceder a la cámara")
+            print("\nERROR: No se pudo acceder a la cámara")
             if IS_RASPBERRY_PI:
                 print("\nSoluciones:")
                 print("1. sudo apt install -y python3-picamera2")
-                print("2. sudo raspi-config → Interface Options → Camera → Enable")
+                print("2. sudo raspi-config -> Interface Options -> Camera -> Enable")
                 print("3. Reinicia la Raspberry Pi")
             return False
         
-        print("✓ Cámara inicializada correctamente")
+        print("OK - Cámara inicializada correctamente")
         return True
     
     def inicializar_aruco(self):
@@ -271,12 +249,12 @@ class RobotArucoTracker:
             aruco_params = cv2.aruco.DetectorParameters()
             self.detector = cv2.aruco.ArucoDetector(aruco_dict, aruco_params)
             
-            print(f"✓ Detector ArUco listo (6X6_250)")
+            print(f"OK - Detector ArUco listo (6X6_250)")
             print(f"  Tamaño marcador: {MARKER_SIZE * 100} cm")
             return True
             
         except Exception as e:
-            print(f"✗ Error al inicializar ArUco: {e}")
+            print(f"ERROR - Error al inicializar ArUco: {e}")
             return False
     
     def enviar_comando(self, comando):
@@ -293,22 +271,23 @@ class RobotArucoTracker:
             self.ultimo_comando = comando
             self.tiempo_ultimo_comando = tiempo_actual
             
-            if self.modo_debug:
+            # Log periódico cada 30 frames
+            if self.modo_debug and self.frames_procesados % 30 == 0:
                 timestamp = datetime.now().strftime("%H:%M:%S.%f")[:-3]
                 comandos_str = {
-                    'F': '↑ AVANZAR',
-                    'B': '↓ RETROCEDER',
-                    'L': '← IZQUIERDA',
-                    'R': '→ DERECHA',
-                    'S': '■ DETENER',
-                    'G': '↑ DESPACIO'
+                    'F': 'AVANZAR',
+                    'B': 'RETROCEDER',
+                    'L': 'IZQUIERDA',
+                    'R': 'DERECHA',
+                    'S': 'DETENER',
+                    'G': 'DESPACIO'
                 }
-                print(f"[{timestamp}] {comandos_str.get(comando, comando)}")
+                print(f"[{timestamp}] CMD: {comandos_str.get(comando, comando)}")
             
             return True
             
         except Exception as e:
-            print(f"✗ Error al enviar: {e}")
+            print(f"ERROR - Error al enviar: {e}")
             return False
     
     def calcular_comando(self, distancia, yaw):
@@ -320,42 +299,43 @@ class RobotArucoTracker:
             yaw: Ángulo de rotación en grados
         
         Returns:
-            (comando, descripción, color)
+            comando
         """
         
-        # 1. PRIORIDAD: Distancia muy cerca → DETENER
+        # 1. PRIORIDAD: Distancia muy cerca -> DETENER
         if distancia < DISTANCIA_MUY_CERCA:
-            return CMD_DETENER, f"Muy cerca ({distancia:.1f}cm)", (0, 0, 255)
+            return CMD_DETENER
         
         # 2. ORIENTACIÓN: Corregir ángulo primero
-        # Si está desalineado más de la tolerancia, girar
         if abs(yaw) > ANGULO_YAW_TOLERANCIA:
             if yaw > 0:
-                return CMD_DERECHA, f"Girar DER ({yaw:.1f}°)", (255, 165, 0)
+                return CMD_DERECHA
             else:
-                return CMD_IZQUIERDA, f"Girar IZQ ({yaw:.1f}°)", (255, 165, 0)
+                return CMD_IZQUIERDA
         
         # 3. DISTANCIA: Ajustar distancia al objetivo
         diff_distancia = distancia - DISTANCIA_OBJETIVO
         
-        # Muy lejos → Avanzar despacio
+        # Muy lejos -> Avanzar despacio
         if distancia > DISTANCIA_MUY_LEJOS:
-            return CMD_DESPACIO, f"Muy lejos ({distancia:.1f}cm)", (255, 255, 0)
+            return CMD_DESPACIO
         
-        # Lejos del objetivo → Avanzar
+        # Lejos del objetivo -> Avanzar
         elif diff_distancia > DISTANCIA_TOLERANCIA:
-            return CMD_AVANZAR, f"Acercarse ({distancia:.1f}cm)", (0, 255, 0)
+            return CMD_AVANZAR
         
-        # Cerca del objetivo → Retroceder
+        # Cerca del objetivo -> Retroceder
         elif diff_distancia < -DISTANCIA_TOLERANCIA:
-            return CMD_RETROCEDER, f"Alejarse ({distancia:.1f}cm)", (200, 100, 255)
+            return CMD_RETROCEDER
         
-        # En posición objetivo → Detener
+        # En posición objetivo -> Detener
         else:
-            return CMD_DETENER, f"Posición OK ({distancia:.1f}cm)", (0, 255, 0)
+            return CMD_DETENER
     
     def procesar_frame(self, frame):
         """Procesa un frame para detectar ArUco y decidir acción"""
+        
+        self.frames_procesados += 1
         
         # Convertir a escala de grises
         gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
@@ -364,16 +344,14 @@ class RobotArucoTracker:
         corners, ids, rejected = self.detector.detectMarkers(gray)
         
         comando = CMD_DETENER
-        info_texto = "Buscando ArUco..."
-        color_info = (0, 165, 255)
         
         if ids is not None and len(ids) > 0:
             # ArUco detectado
-            self.aruco_detectado = True
-            self.tiempo_sin_aruco = time.time()
+            if not self.aruco_detectado:
+                print("\n>>> ArUco DETECTADO <<<")
+                self.aruco_detectado = True
             
-            # Dibujar marcadores
-            cv2.aruco.drawDetectedMarkers(frame, corners, ids)
+            self.tiempo_sin_aruco = time.time()
             
             # Estimar pose
             rvecs, tvecs, _ = cv2.aruco.estimatePoseSingleMarkers(
@@ -386,9 +364,6 @@ class RobotArucoTracker:
             tvec = tvecs[i][0]
             marker_id = int(ids[i][0])
             
-            # Dibujar ejes
-            frame = draw_axis(frame, CAMERA_MATRIX, DIST_COEFFS, rvec, tvec)
-            
             # Calcular distancia
             distancia = np.linalg.norm(tvec) * 100  # en cm
             
@@ -397,87 +372,45 @@ class RobotArucoTracker:
             roll, pitch, yaw = rotation_matrix_to_euler_angles(rotation_matrix)
             
             # Calcular comando basado en distancia y yaw
-            comando, info_texto, color_info = self.calcular_comando(distancia, yaw)
+            comando = self.calcular_comando(distancia, yaw)
             
-            # Dibujar información en pantalla
-            corner = corners[i][0][0]
-            x, y = int(corner[0]), int(corner[1])
-            
-            # Info básica
-            cv2.putText(frame, f"ID: {marker_id}", (x, y - 100),
-                       cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
-            cv2.putText(frame, f"Dist: {distancia:.1f} cm", (x, y - 75),
-                       cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 255), 2)
-            
-            # Rotación
-            cv2.putText(frame, f"Yaw: {yaw:.1f}deg", (x, y - 50),
-                       cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 200, 100), 2)
-            cv2.putText(frame, f"Pitch: {pitch:.1f}deg", (x, y - 30),
-                       cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 200, 100), 2)
-            cv2.putText(frame, f"Roll: {roll:.1f}deg", (x, y - 10),
-                       cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 200, 100), 2)
-            
-            # Línea horizontal de referencia
-            alto, ancho = frame.shape[:2]
-            cv2.line(frame, (ancho//2 - 50, alto//2), 
-                    (ancho//2 + 50, alto//2), (0, 255, 0), 2)
-            cv2.circle(frame, (ancho//2, alto//2), 5, (0, 0, 255), -1)
+            # Log periódico cada 30 frames
+            if self.frames_procesados % 30 == 0:
+                print(f"  ID: {marker_id} | Dist: {distancia:.1f}cm | Yaw: {yaw:.1f}° | CMD: {comando}")
             
         else:
             # Sin ArUco
             if self.aruco_detectado:
                 tiempo_perdido = time.time() - self.tiempo_sin_aruco
-                if tiempo_perdido < 1.0:
-                    # Poco tiempo sin verlo
-                    comando = CMD_DETENER
-                    info_texto = "ArUco perdido - Esperando..."
-                    color_info = (0, 165, 255)
-                else:
+                if tiempo_perdido > 1.0:
                     # Mucho tiempo sin verlo
+                    print("\n>>> ArUco PERDIDO - Robot detenido <<<")
                     self.aruco_detectado = False
                     comando = CMD_DETENER
-                    info_texto = "Sin ArUco - DETENIDO"
-                    color_info = (0, 0, 255)
         
-        # Estado en pantalla
-        alto = frame.shape[0]
-        cv2.putText(frame, info_texto, (10, alto - 50),
-                   cv2.FONT_HERSHEY_SIMPLEX, 0.8, color_info, 2)
-        cv2.putText(frame, f"CMD: {comando}", (10, alto - 20),
-                   cv2.FONT_HERSHEY_SIMPLEX, 0.8, color_info, 2)
-        
-        # Parámetros de configuración
-        cv2.putText(frame, f"Dist. Objetivo: {DISTANCIA_OBJETIVO:.0f}cm", (10, 30),
-                   cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
-        cv2.putText(frame, f"Tolerancia Yaw: +/-{ANGULO_YAW_TOLERANCIA:.0f}deg", (10, 50),
-                   cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
-        
-        return frame, comando
+        return comando
     
     def ejecutar(self):
-        """Bucle principal"""
+        """Bucle principal HEADLESS (sin display)"""
         print("\n" + "=" * 60)
-        print("    ROBOT SEGUIDOR DE ARUCO - SISTEMA INICIADO")
+        print("    ROBOT SEGUIDOR DE ARUCO - MODO HEADLESS")
         print("=" * 60)
-        print("Controles:")
-        print("  Q - Salir")
-        print("  D - Toggle debug")
-        print("  T - Test de motores")
-        print("  ESPACIO - Detener emergencia")
-        print("  C - Mostrar info de calibración")
+        print("Sin interfaz gráfica - Ejecución automática")
+        print("Presiona Ctrl+C para detener")
         print("=" * 60)
         print(f"\nParámetros actuales:")
-        print(f"  Distancia objetivo: {DISTANCIA_OBJETIVO} cm (±{DISTANCIA_TOLERANCIA} cm)")
-        print(f"  Tolerancia angular: ±{ANGULO_YAW_TOLERANCIA}°")
+        print(f"  Distancia objetivo: {DISTANCIA_OBJETIVO} cm (+/-{DISTANCIA_TOLERANCIA} cm)")
+        print(f"  Tolerancia angular: +/-{ANGULO_YAW_TOLERANCIA}°")
         print(f"  Distancia muy cerca: < {DISTANCIA_MUY_CERCA} cm")
         print(f"  Distancia muy lejos: > {DISTANCIA_MUY_LEJOS} cm")
         print("=" * 60 + "\n")
         
         fps_counter = 0
         fps_start = time.time()
-        fps_actual = 0
         
         try:
+            print(">>> INICIANDO SEGUIMIENTO DE ARUCO <<<\n")
+            
             while True:
                 # Leer frame
                 if self.is_picamera:
@@ -489,61 +422,36 @@ class RobotArucoTracker:
                     ret, frame = self.cam.read()
                 
                 if not ret or frame is None:
-                    print("✗ Error al leer frame")
+                    print("ERROR - Error al leer frame de cámara")
                     break
                 
                 # Procesar frame
-                frame_procesado, comando = self.procesar_frame(frame)
+                comando = self.procesar_frame(frame)
                 
                 # Enviar comando
                 self.enviar_comando(comando)
                 
-                # FPS
+                # Reporte periódico (cada 5 segundos)
+                if time.time() - self.ultimo_reporte > 5.0:
+                    fps = self.frames_procesados / (time.time() - fps_start)
+                    print(f"\n[ESTADÍSTICAS] FPS: {fps:.1f} | Frames procesados: {self.frames_procesados}")
+                    if self.aruco_detectado:
+                        print("               Estado: SIGUIENDO ARUCO")
+                    else:
+                        print("               Estado: BUSCANDO ARUCO")
+                    self.ultimo_reporte = time.time()
+                
                 fps_counter += 1
-                if fps_counter >= 30:
-                    fps_actual = fps_counter / (time.time() - fps_start)
-                    fps_counter = 0
-                    fps_start = time.time()
-                
-                cv2.putText(frame_procesado, f"FPS: {fps_actual:.1f}", 
-                           (frame_procesado.shape[1] - 120, 30),
-                           cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2)
-                
-                # Mostrar
-                cv2.imshow('Robot ArUco Tracker', frame_procesado)
-                
-                # Teclas
-                key = cv2.waitKey(1) & 0xFF
-                
-                if key == ord('q') or key == ord('Q'):
-                    print("\nSaliendo...")
-                    break
-                elif key == ord('d') or key == ord('D'):
-                    self.modo_debug = not self.modo_debug
-                    print(f"Debug: {'ON' if self.modo_debug else 'OFF'}")
-                elif key == ord('t') or key == ord('T'):
-                    print("Test de motores...")
-                    self.enviar_comando(CMD_TEST)
-                elif key == 32:  # ESPACIO
-                    print("¡DETENCIÓN DE EMERGENCIA!")
-                    for _ in range(5):
-                        self.enviar_comando(CMD_DETENER)
-                        time.sleep(0.05)
-                elif key == ord('c') or key == ord('C'):
-                    print("\n=== INFO CALIBRACIÓN ===")
-                    print(f"Matriz cámara:\n{CAMERA_MATRIX}")
-                    print(f"Coef. distorsión: {DIST_COEFFS.ravel()}")
-                    print("========================\n")
                 
         except KeyboardInterrupt:
-            print("\n\nInterrumpido (Ctrl+C)")
+            print("\n\n>>> Interrumpido por usuario (Ctrl+C) <<<")
         
         finally:
             self.limpiar()
     
     def limpiar(self):
         """Limpia recursos"""
-        print("\nLimpiando recursos...")
+        print("\n>>> Limpiando recursos <<<")
         
         if self.bluetooth and self.bluetooth.is_open:
             print("Deteniendo robot...")
@@ -554,26 +462,26 @@ class RobotArucoTracker:
             except:
                 pass
             self.bluetooth.close()
-            print("✓ Bluetooth cerrado")
+            print("OK - Bluetooth cerrado")
         
         if self.cam:
             if self.is_picamera:
                 self.cam.stop()
             else:
                 self.cam.release()
-            print("✓ Cámara liberada")
+            print("OK - Cámara liberada")
         
-        cv2.destroyAllWindows()
-        print("✓ Limpieza completa")
-        print("\n¡Hasta pronto!\n")
+        print("OK - Limpieza completa")
+        print("\n>>> Sistema apagado correctamente <<<\n")
 
 
 # ============== FUNCIÓN PRINCIPAL ==============
 
 def main():
     print("\n" + "=" * 60)
-    print("  ROBOT SEGUIDOR DE ARUCO CON DISTANCIA Y ROTACIÓN")
+    print("  ROBOT SEGUIDOR DE ARUCO - VERSIÓN HEADLESS")
     print("  Raspberry Pi 4 + Arduino + HC-05 + Detección 3D")
+    print("  Sin Display - Para Ejecución Automática")
     print("=" * 60 + "\n")
     
     robot = RobotArucoTracker()
