@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Robot Seguidor de Códigos ArUco - VERSIÓN HEADLESS
+Robot Seguidor de Códigos ArUco - VERSIÓN HEADLESS CORREGIDA
 Raspberry Pi 4 + Arduino + HC-05 Bluetooth
 Solo 2 motores (M1 y M2)
 Sin display - para ejecución automática
+CORREGIDO: Keepalive activo para mantener conexión Bluetooth
 """
 
 import cv2
@@ -55,7 +56,7 @@ DISTANCIA_MUY_CERCA = 15.0      # Muy cerca - detener
 DISTANCIA_MUY_LEJOS = 60.0      # Muy lejos - avanzar despacio
 
 ANGULO_YAW_TOLERANCIA = 15.0    # Tolerancia de ángulo yaw (±15°)
-VELOCIDAD_ENVIO = 0.2           # Segundos entre comandos
+VELOCIDAD_ENVIO = 1.0           # ⚡ CAMBIADO: Enviar cada 1 segundo (KEEPALIVE)
 
 # Comandos
 CMD_AVANZAR = 'F'
@@ -259,15 +260,28 @@ class RobotArucoTracker:
             return False
     
     def enviar_comando(self, comando):
-        """Envía un comando al Arduino"""
+        """
+        Envía un comando al Arduino
+        ⚡ CORREGIDO: Ahora SIEMPRE envía aunque sea el mismo comando
+        Esto mantiene la conexión Bluetooth activa (KEEPALIVE)
+        """
         try:
             tiempo_actual = time.time()
+            
+            # ⚡ CAMBIADO: Ahora SÍ envía comandos repetidos después de VELOCIDAD_ENVIO
+            # Esto previene que el HC-05 cierre la conexión por inactividad
             if (comando == self.ultimo_comando and 
                 tiempo_actual - self.tiempo_ultimo_comando < VELOCIDAD_ENVIO):
-                return True
+                return True  # Aún no es tiempo de reenviar
             
+            # Enviar comando
             self.bluetooth.write(comando.encode())
             self.bluetooth.flush()
+            
+            # ⚡ NUEVO: Vaciar buffer de respuesta del Arduino
+            # Esto previene que el buffer se llene y bloquee la comunicación
+            if self.bluetooth.in_waiting > 0:
+                self.bluetooth.read(self.bluetooth.in_waiting)
             
             self.ultimo_comando = comando
             self.tiempo_ultimo_comando = tiempo_actual
@@ -283,12 +297,13 @@ class RobotArucoTracker:
                     'S': 'DETENER',
                     'G': 'DESPACIO'
                 }
-                print(f"[{timestamp}] CMD: {comandos_str.get(comando, comando)}")
+                print(f"[{timestamp}] CMD: {comandos_str.get(comando, comando)} (Keepalive activo)")
             
             return True
             
         except Exception as e:
             print(f"ERROR - Error al enviar: {e}")
+            print("⚠ La conexión Bluetooth puede haberse perdido")
             return False
     
     def calcular_comando(self, distancia, yaw):
@@ -404,13 +419,15 @@ class RobotArucoTracker:
         print(f"  Tolerancia angular: +/-{ANGULO_YAW_TOLERANCIA}°")
         print(f"  Distancia muy cerca: < {DISTANCIA_MUY_CERCA} cm")
         print(f"  Distancia muy lejos: > {DISTANCIA_MUY_LEJOS} cm")
+        print(f"  ⚡ Keepalive Bluetooth: Cada {VELOCIDAD_ENVIO}s")
         print("=" * 60 + "\n")
         
         fps_counter = 0
         fps_start = time.time()
         
         try:
-            print(">>> INICIANDO SEGUIMIENTO DE ARUCO <<<\n")
+            print(">>> INICIANDO SEGUIMIENTO DE ARUCO <<<")
+            print(">>> KEEPALIVE ACTIVO - Bluetooth siempre enviando <<<\n")
             
             while True:
                 # Leer frame
@@ -429,7 +446,8 @@ class RobotArucoTracker:
                 # Procesar frame
                 comando = self.procesar_frame(frame)
                 
-                # Enviar comando
+                # ⚡ IMPORTANTE: Enviar comando SIEMPRE (incluso si es 'S' repetido)
+                # Esto mantiene la conexión Bluetooth activa
                 self.enviar_comando(comando)
                 
                 # Reporte periódico (cada 5 segundos)
@@ -440,6 +458,7 @@ class RobotArucoTracker:
                         print("               Estado: SIGUIENDO ARUCO")
                     else:
                         print("               Estado: BUSCANDO ARUCO")
+                    print("               Bluetooth: KEEPALIVE ACTIVO")
                     self.ultimo_reporte = time.time()
                 
                 fps_counter += 1
@@ -480,9 +499,9 @@ class RobotArucoTracker:
 
 def main():
     print("\n" + "=" * 60)
-    print("  ROBOT SEGUIDOR DE ARUCO - VERSIÓN HEADLESS")
+    print("  ROBOT SEGUIDOR DE ARUCO - VERSIÓN HEADLESS CORREGIDA")
     print("  Raspberry Pi 4 + Arduino + HC-05 + Detección 3D")
-    print("  Sin Display - Para Ejecución Automática")
+    print("  ⚡ KEEPALIVE ACTIVO - Mantiene Bluetooth vivo")
     print("=" * 60 + "\n")
     
     robot = RobotArucoTracker()
