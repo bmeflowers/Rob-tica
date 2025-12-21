@@ -169,28 +169,28 @@ class RobotArucoTracker:
         self.tiempo_sin_aruco = time.time()
         self.frames_procesados = 0
         self.ultimo_reporte = time.time()
-        
+
     def verificar_conexion_bluetooth(self):
-    """Verifica que /dev/rfcomm0 exista y reintenta si es necesario"""
-    print("=" * 50)
-    print("Verificando conexión Bluetooth...")
-    print("=" * 50)
-    
-    import os
-    
-    max_intentos = 10
-    for intento in range(1, max_intentos + 1):
-        if os.path.exists(BLUETOOTH_PORT):
-            print(f"OK - {BLUETOOTH_PORT} existe")
-            return True
+        """Verifica que /dev/rfcomm0 exista y reintenta si es necesario"""
+        print("=" * 50)
+        print("Verificando conexión Bluetooth...")
+        print("=" * 50)
         
-        print(f"Intento {intento}/{max_intentos}: Esperando {BLUETOOTH_PORT}...")
-        time.sleep(2)
-    
-    print(f"\nERROR: {BLUETOOTH_PORT} no existe después de {max_intentos} intentos")
-    print("\nEl servicio de Bluetooth puede no estar listo todavía.")
-    print("El sistema intentará reiniciar automáticamente.")
-    return False
+        import os
+        
+        max_intentos = 10
+        for intento in range(1, max_intentos + 1):
+            if os.path.exists(BLUETOOTH_PORT):
+                print(f"OK - {BLUETOOTH_PORT} existe")
+                return True
+            
+            print(f"Intento {intento}/{max_intentos}: Esperando {BLUETOOTH_PORT}...")
+            time.sleep(2)
+        
+        print(f"\nERROR: {BLUETOOTH_PORT} no existe después de {max_intentos} intentos")
+        print("\nEl servicio de Bluetooth puede no estar listo todavía.")
+        print("El sistema intentará reiniciar automáticamente.")
+        return False
     
     def conectar_bluetooth(self):
         """Conecta al Arduino via Bluetooth"""
